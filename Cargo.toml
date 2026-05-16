@@ -1,0 +1,21 @@
+# Cargo workspace for OxiZ ecosystem language bindings.
+#
+# Bindings are split into "core" (oxiz proper — oxiz-sat / oxiz-
+# proof / etc.) and one crate per contribution surface
+# ("contrib-<name>" — oxiz-contrib-abduction, etc.). The split keeps
+# layering clean: promotion of a contribution crate to first-party
+# OxiZ doesn't drag its bindings along, and consumers can pick
+# exactly the binding surface they need.
+
+[workspace]
+resolver = "3"
+members = [
+    "core",
+    "contrib-abduction",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/newsniper-org/oxiz-contrib-bindings"

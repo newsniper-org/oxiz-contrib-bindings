@@ -1,0 +1,15 @@
+[package]
+name = "oxiz-binding-lean4"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lean4 FFI bindings for the OxiZ solver suite (oxiz-sat etc.)"
+keywords = ["lean4", "ffi", "oxiz", "sat", "smt"]
+categories = ["api-bindings", "external-ffi-bindings"]
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+oxiz-sat = "0.2"

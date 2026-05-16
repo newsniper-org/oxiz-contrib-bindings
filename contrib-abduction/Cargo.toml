@@ -1,0 +1,25 @@
+[package]
+name = "oxiz-binding-lean4-contrib-abduction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lean4 FFI bindings for the oxiz-contrib-abduction crate"
+keywords = ["lean4", "ffi", "oxiz", "abduction", "abductive"]
+categories = ["api-bindings", "external-ffi-bindings"]
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+# Pull in the abduction trait + the `oxiz-sat` adapter so Lean4
+# can drive the search against a backing oxiz-sat solver. The
+# adapter lives behind a feature flag in the parent crate; we
+# enable it here so the binding always has a working backend out
+# of the box. Downstream consumers who only want the bare trait
+# can disable default features at the workspace level.
+# Until oxiz-contrib-abduction lands on crates.io we depend on the
+# git repo directly. Swap to a `version = "0.1"` entry once it's
+# published.
+oxiz-contrib-abduction = { git = "https://github.com/newsniper-org/oxiz-contrib-abduction", features = ["oxiz-sat"] }
+oxiz-sat = "0.2"
