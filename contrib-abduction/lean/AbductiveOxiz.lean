@@ -5,9 +5,9 @@ Companion to the `Oxiz` namespace in `oxiz-binding-lean4`. This file
 declares the Lean-side wrappers for the abductive-reasoning crate;
 link against `liboxiz_binding_lean4_contrib_abduction.{a,so}`.
 
-Status: v0.1 covers backend new / free, add_clause on the
-underlying solver, and the `abduce` search. Explanation strings
-and FullVerdict introspection arrive in v0.2.
+Status: v0.2 — covers backend new / free, add_clause, `abduce`
+search, `check_with` (single-step verdict + unsat-core probe),
+and per-abducible `explanation` strings.
 -/
 
 namespace AbductiveOxiz
@@ -47,6 +47,27 @@ namespace Backend
     (maxSolutions : USize) →
     (maxIndices : USize) →
     IO (Int32 × Array USize × Array Int32)
+
+  /-- Single-step probe: check whether the formula remains
+  satisfiable under the chosen abducible subset (indices into
+  the abducible list configured at backend creation). Returns the
+  verdict code plus, when the verdict is Unsat, the unsat-core
+  literals (DIMACS-style) written into a caller-allocated buffer.
+  Verdict codes: 0=Sat, 1=Unsat, 2=Unknown, -1=error. -/
+  @[extern "oxiz_lean4_abduction_check_with"]
+  opaque checkWith :
+    Backend →
+    (indices : @& Array USize) →
+    (maxCore : USize) →
+    IO (Int32 × USize × Array Int32)
+
+  /-- Read the optional `explanation` field for the abducible at
+  the given index. Returns the bytes written into the caller-
+  allocated buffer; `0` if the explanation is unset; `-1` on
+  out-of-range index. -/
+  @[extern "oxiz_lean4_abduction_abducible_explanation"]
+  opaque abducibleExplanation :
+    Backend → (index : USize) → (outCap : USize) → IO (Int32 × String)
 
 end Backend
 

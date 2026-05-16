@@ -19,7 +19,7 @@
 use std::os::raw::c_int;
 use std::ptr::NonNull;
 
-use oxiz_sat::{Lit, Solver, SolverResult, Var};
+use oxiz_sat::{LBool, Lit, Solver, SolverResult, Var};
 
 /// Verdict codes returned across the FFI boundary. These mirror
 /// `oxiz_sat::SolverResult` but use C-stable `i32` so Lean4's
@@ -28,6 +28,14 @@ pub const OXIZ_LEAN4_VERDICT_SAT: c_int = 0;
 pub const OXIZ_LEAN4_VERDICT_UNSAT: c_int = 1;
 pub const OXIZ_LEAN4_VERDICT_UNKNOWN: c_int = 2;
 pub const OXIZ_LEAN4_VERDICT_ERROR: c_int = -1;
+
+/// Three-valued logic codes for `oxiz_lean4_solver_model_value`:
+/// `1` true, `0` false, `2` undefined (variable wasn't assigned —
+/// e.g. solver hasn't run yet, or the variable is irrelevant to the
+/// model and oxiz-sat left it free). `-1` on argument fault.
+pub const OXIZ_LEAN4_LBOOL_FALSE: c_int = 0;
+pub const OXIZ_LEAN4_LBOOL_TRUE: c_int = 1;
+pub const OXIZ_LEAN4_LBOOL_UNDEF: c_int = 2;
 
 fn verdict_code(r: SolverResult) -> c_int {
     match r {
@@ -137,6 +145,72 @@ pub unsafe extern "C" fn oxiz_lean4_solver_solve(solver: *mut Solver) -> c_int {
     verdict_code(s.solve())
 }
 
+/// Read the truth value assigned to variable `var_idx` in the most
+/// recent model. Returns `OXIZ_LEAN4_LBOOL_{TRUE,FALSE,UNDEF}` per
+/// the LBool encoding documented above, or `-1` on argument fault.
+/// Calling this before a `solve()` that returned Sat yields
+/// `OXIZ_LEAN4_LBOOL_UNDEF` rather than an error — the solver
+/// simply has no assignment yet.
+///
+/// # Safety
+/// `solver` must be a valid pointer returned by
+/// `oxiz_lean4_solver_new` and not previously freed. `var_idx`
+/// must be a non-negative index into the solver's variable table
+/// (out-of-range indices return `OXIZ_LEAN4_LBOOL_UNDEF`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn oxiz_lean4_solver_model_value(
+    solver: *mut Solver,
+    var_idx: i32,
+) -> c_int {
+    let Some(s) = NonNull::new(solver) else {
+        return -1;
+    };
+    if var_idx < 0 {
+        return -1;
+    }
+    let s = unsafe { s.as_ptr().as_mut().unwrap() };
+    let var = Var::new(var_idx as u32);
+    match s.model_value(var) {
+        LBool::True => OXIZ_LEAN4_LBOOL_TRUE,
+        LBool::False => OXIZ_LEAN4_LBOOL_FALSE,
+        _ => OXIZ_LEAN4_LBOOL_UNDEF,
+    }
+}
+
+/// Open an incremental scope. Subsequent `add_clause` calls add
+/// clauses to this scope; `pop` discards them all. Calls nest.
+///
+/// # Safety
+/// `solver` must be a valid pointer returned by
+/// `oxiz_lean4_solver_new` and not previously freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn oxiz_lean4_solver_push(solver: *mut Solver) -> c_int {
+    let Some(s) = NonNull::new(solver) else {
+        return -1;
+    };
+    let s = unsafe { s.as_ptr().as_mut().unwrap() };
+    s.push();
+    0
+}
+
+/// Close the innermost incremental scope, discarding every clause
+/// added since the matching `push`.
+///
+/// # Safety
+/// `solver` must be a valid pointer returned by
+/// `oxiz_lean4_solver_new` and not previously freed. Calling `pop`
+/// without a matching `push` is a no-op (oxiz-sat keeps a stack
+/// floor at the root scope).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn oxiz_lean4_solver_pop(solver: *mut Solver) -> c_int {
+    let Some(s) = NonNull::new(solver) else {
+        return -1;
+    };
+    let s = unsafe { s.as_ptr().as_mut().unwrap() };
+    s.pop();
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,6 +279,84 @@ mod tests {
             );
             assert_eq!(oxiz_lean4_solver_solve(solver), OXIZ_LEAN4_VERDICT_UNSAT);
             oxiz_lean4_solver_free(solver);
+        }
+    }
+
+    // === v0.2: model extraction + push/pop ============================
+
+    #[test]
+    fn model_value_returns_assignment_after_sat() {
+        let solver = oxiz_lean4_solver_new();
+        unsafe {
+            let v = oxiz_lean4_solver_new_var(solver);
+            // Unit clause (x) forces x=true.
+            let lits = [v + 1];
+            assert!(oxiz_lean4_solver_add_clause(solver, lits.as_ptr(), 1) >= 0);
+            assert_eq!(oxiz_lean4_solver_solve(solver), OXIZ_LEAN4_VERDICT_SAT);
+            assert_eq!(
+                oxiz_lean4_solver_model_value(solver, v),
+                OXIZ_LEAN4_LBOOL_TRUE
+            );
+            oxiz_lean4_solver_free(solver);
+        }
+    }
+
+    #[test]
+    fn model_value_for_unassigned_returns_undef() {
+        // Bare solver (no clauses, no solve call) — model is empty.
+        let solver = oxiz_lean4_solver_new();
+        unsafe {
+            let v = oxiz_lean4_solver_new_var(solver);
+            assert_eq!(
+                oxiz_lean4_solver_model_value(solver, v),
+                OXIZ_LEAN4_LBOOL_UNDEF
+            );
+            oxiz_lean4_solver_free(solver);
+        }
+    }
+
+    #[test]
+    fn model_value_rejects_negative_and_null() {
+        let solver = oxiz_lean4_solver_new();
+        unsafe {
+            assert_eq!(oxiz_lean4_solver_model_value(solver, -1), -1);
+            assert_eq!(oxiz_lean4_solver_model_value(std::ptr::null_mut(), 0), -1);
+            oxiz_lean4_solver_free(solver);
+        }
+    }
+
+    #[test]
+    fn push_pop_restores_state() {
+        // Build a satisfiable formula, push, add a contradictory
+        // clause, observe unsat, pop, observe sat again.
+        let solver = oxiz_lean4_solver_new();
+        unsafe {
+            let x = oxiz_lean4_solver_new_var(solver);
+            let pos = [x + 1];
+            assert!(oxiz_lean4_solver_add_clause(solver, pos.as_ptr(), 1) >= 0);
+
+            // Inside push: add ¬x → contradiction.
+            assert_eq!(oxiz_lean4_solver_push(solver), 0);
+            let neg = [-(x + 1)];
+            assert!(oxiz_lean4_solver_add_clause(solver, neg.as_ptr(), 1) >= 0);
+            assert_eq!(
+                oxiz_lean4_solver_solve(solver),
+                OXIZ_LEAN4_VERDICT_UNSAT
+            );
+
+            // Pop drops the ¬x clause; the original formula
+            // remains sat.
+            assert_eq!(oxiz_lean4_solver_pop(solver), 0);
+            assert_eq!(oxiz_lean4_solver_solve(solver), OXIZ_LEAN4_VERDICT_SAT);
+            oxiz_lean4_solver_free(solver);
+        }
+    }
+
+    #[test]
+    fn push_pop_on_null_solver_reports_error() {
+        unsafe {
+            assert_eq!(oxiz_lean4_solver_push(std::ptr::null_mut()), -1);
+            assert_eq!(oxiz_lean4_solver_pop(std::ptr::null_mut()), -1);
         }
     }
 }
