@@ -4,12 +4,25 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Lean4 FFI bindings for the OxiZ solver suite (oxiz-sat etc.)"
+description = "Lean4 FFI bindings for the OxiZ solver suite (oxiz-sat / oxiz-proof / oxiz-math)"
 keywords = ["lean4", "ffi", "oxiz", "sat", "smt"]
 categories = ["api-bindings", "external-ffi-bindings"]
 
 [lib]
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Each upstream OxiZ crate has its own feature gate so Lean
+# consumers don't pay for surfaces they don't use. `oxiz-sat` is
+# kept on by default for backwards compatibility with v0.2 — code
+# that linked the binding without explicit feature selection
+# continues to work.
+[features]
+default = ["oxiz-sat"]
+oxiz-sat = ["dep:oxiz-sat"]
+oxiz-proof = ["dep:oxiz-proof"]
+oxiz-math = ["dep:oxiz-math"]
+
 [dependencies]
-oxiz-sat = "0.2"
+oxiz-sat = { version = "0.2", optional = true }
+oxiz-proof = { version = "0.2", optional = true }
+oxiz-math = { version = "0.2", optional = true }

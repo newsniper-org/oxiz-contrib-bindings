@@ -1,14 +1,23 @@
 # `oxiz-binding-lean4`
 
-Lean4 FFI bindings for the OxiZ SAT solver suite (`oxiz-sat`).
-
-This crate exposes a small C ABI surface (opaque solver pointer,
-`add_clause`, `solve`, …) consumable from Lean4 via `@[extern]`
-declarations. The Lean-side declarations live in `lean/Oxiz.lean`.
+Lean4 FFI bindings for the OxiZ solver suite (oxiz proper —
+`oxiz-sat`, `oxiz-proof`, `oxiz-math`). Lean-side declarations
+live under `lean/`.
 
 For bindings to our community contribution crates
 (`oxiz-contrib-abduction`, …), see the sibling
 `oxiz-binding-lean4-contrib-abduction` crate.
+
+## Cargo features
+
+Each upstream OxiZ crate is gated so Lean consumers only pay for
+the surfaces they actually use:
+
+| Feature | Lean module | Enables |
+|---|---|---|
+| `oxiz-sat` (default) | `lean/Oxiz.lean` | SAT solver — clause management, push/pop, model extraction |
+| `oxiz-proof` | `lean/Proof.lean` | DRAT proof writer — add / delete clause, text serialization |
+| `oxiz-math` (forthcoming) | `lean/Math.lean` | Simplex / polynomial helpers |
 
 ## Build
 
