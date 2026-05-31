@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Lean4 FFI bindings for the oxiz-contrib-abduction crate"
+description = "Lean4 FFI bindings for the oxiz-contrib-abduction crate. [FROZEN until leo4 v1.0 release — see repo README §Freeze status]"
 keywords = ["lean4", "ffi", "oxiz", "abduction", "abductive"]
 categories = ["api-bindings", "external-ffi-bindings"]
 

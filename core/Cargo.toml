@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Lean4 FFI bindings for the OxiZ solver suite (oxiz-sat / oxiz-proof / oxiz-math)"
+description = "Lean4 FFI bindings for the OxiZ solver suite (oxiz-sat / oxiz-proof / oxiz-math). [FROZEN until leo4 v1.0 release — see repo README §Freeze status]"
 keywords = ["lean4", "ffi", "oxiz", "sat", "smt"]
 categories = ["api-bindings", "external-ffi-bindings"]
 
